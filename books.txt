@@ -1,0 +1,10 @@
+1,'Dung Bao Gio Di An Mot Minh',2020
+2,'Duong May Qua Xu Tuyet',2010
+3,'Ngoc Sang Trong Hoa Sen',2011
+4,'Duong May Tren Dat Hoa',2015
+5,'Tay Tang Huyen Bi',2006
+6,'Big Data',2020
+7,'Big Data Analytis',2022
+8,'Machine Learning',2020
+9,'IoT',2018
+10,'Lap Trinh Web Voi ASP.NET Core',2018
