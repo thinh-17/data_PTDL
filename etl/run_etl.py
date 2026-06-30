@@ -225,6 +225,7 @@ def run_pipeline(mode: str, batch_name: str | None):
             "storage/mart/mart_order_bad_review_features.sql",
             "storage/mart/mart_customer_cluster_features.sql",
             "storage/mart/mart_seller_cluster_features.sql",
+            "storage/mart/mart_late_delivery_features.sql",
         ])
 
         finish_batch(batch_id, "SUCCESS")
