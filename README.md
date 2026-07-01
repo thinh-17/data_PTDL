@@ -30,7 +30,7 @@ pip install -r requirements.txt
 ### Bước 3: chạy ETL full load
 
 ```bash
-python etl/run_etl.py full
+python integration_layer/run_etl.py full
 ```
 
 Sau bước này, database sẽ có 3 schema:

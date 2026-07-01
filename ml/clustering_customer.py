@@ -60,6 +60,27 @@ def main():
 
     summary = result.groupby("cluster").mean(numeric_only=True)
     summary.to_csv(OUTPUT_DIR / "customer_cluster_summary.csv")
+    # Elbow chart
+    inertias = []
+    k_values = range(2, 11)
+
+    for k in k_values:
+        temp_pipeline = Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler()),
+            ("kmeans", KMeans(n_clusters=k, random_state=42, n_init=10)),
+        ])
+        temp_pipeline.fit(X)
+        inertias.append(temp_pipeline.named_steps["kmeans"].inertia_)
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(list(k_values), inertias, marker="o")
+    ax.set_title("Elbow Chart for Customer Clustering")
+    ax.set_xlabel("Number of clusters")
+    ax.set_ylabel("Inertia")
+    fig.tight_layout()
+    fig.savefig(OUTPUT_DIR / "customer_elbow_chart.png")
+    plt.close(fig)
 
     # biểu đồ tổng chi tiêu trung bình theo cụm
     fig, ax = plt.subplots(figsize=(7, 4))

@@ -160,19 +160,19 @@ def load_csv_folder_to_raw(folder: Path, batch_id: int):
 
 def get_data_folder(mode: str, batch_name: str | None) -> Path:
     if mode == "full":
-        return ROOT_DIR / "data_source" / "raw"
+        return ROOT_DIR / "data_source_layer" / "raw"
 
     if not batch_name:
         raise ValueError("Incremental mode requires batch name, for example: batch_002")
 
-    return ROOT_DIR / "data_source" / "incremental" / batch_name
+    return ROOT_DIR / "data_source_layer" / "incremental" / batch_name
 
 
 def run_pipeline(mode: str, batch_name: str | None):
     # 1. create schemas + raw/staging tables
     execute_many([
-        "etl/00_create_schemas.sql",
-        "etl/01_create_raw_tables.sql",
+        "integration_layer/00_create_schemas.sql",
+        "integration_layer/01_create_raw_tables.sql",
     ])
 
     # 2. create batch
@@ -186,45 +186,46 @@ def run_pipeline(mode: str, batch_name: str | None):
         load_csv_folder_to_raw(data_folder, batch_id)
 
         # 4. incremental load raw -> staging
-        execute_sql_file(ROOT_DIR / "etl/02_load_data_source.sql", batch_id=batch_id)
-        execute_sql_file(ROOT_DIR / "etl/03_incremental_load.sql", batch_id=batch_id)
-        execute_sql_file(ROOT_DIR / "etl/04_transform_clean_data.sql", batch_id=batch_id)
+        execute_sql_file(ROOT_DIR / "integration_layer/02_load_data_source.sql", batch_id=batch_id)
+        execute_sql_file(ROOT_DIR / "integration_layer/03_incremental_load.sql", batch_id=batch_id)
+        execute_sql_file(ROOT_DIR / "integration_layer/04_transform_clean_data.sql", batch_id=batch_id)
 
         # 5. create star schema
         execute_many([
-            "storage/ddl/01_create_dimensions.sql",
-            "storage/ddl/02_create_facts.sql",
-            "storage/ddl/03_create_indexes.sql",
+            "storage_layer/ddl/01_create_dimensions.sql",
+            "storage_layer/ddl/02_create_facts.sql",
+            "storage_layer/ddl/03_create_indexes.sql",
         ])
 
         # 6. load dimensions, including SCD
-        execute_sql_file(ROOT_DIR / "etl/05_apply_scd.sql", batch_id=batch_id)
+        execute_sql_file(ROOT_DIR / "integration_layer/05_apply_scd.sql", batch_id=batch_id)
         execute_many([
-            "storage/dimensions/load_dim_date.sql",
-            "storage/dimensions/load_dim_location.sql",
-            "storage/dimensions/load_dim_review_score.sql",
-            "storage/dimensions/load_dim_customer.sql",
-            "storage/dimensions/load_dim_seller.sql",
-            "storage/dimensions/load_dim_product.sql",
-            "storage/dimensions/load_dim_order_detail.sql",
+            "storage_layer/dimensions/load_dim_date.sql",
+            "storage_layer/dimensions/load_dim_location.sql",
+            "storage_layer/dimensions/load_dim_review_score.sql",
+            "storage_layer/dimensions/load_dim_customer.sql",
+            "storage_layer/dimensions/load_dim_seller.sql",
+            "storage_layer/dimensions/load_dim_product.sql",
+            "storage_layer/dimensions/load_dim_order_detail.sql",
         ])
 
         # 7. load facts and snapshots
         execute_many([
-            "storage/facts/load_fct_order.sql",
-            "storage/facts/load_fct_order_review.sql",
-            "storage/facts/load_fct_daily_order_snapshot.sql",
-            "storage/facts/load_fct_daily_seller_snapshot.sql",
-            "storage/facts/load_fct_daily_product_snapshot.sql",
-            "storage/facts/load_fct_customer_behavior_snapshot.sql",
+            "storage_layer/facts/load_fct_order.sql",
+            "storage_layer/facts/load_fct_order_review.sql",
+            "storage_layer/facts/load_fct_daily_order_snapshot.sql",
+            "storage_layer/facts/load_fct_daily_seller_snapshot.sql",
+            "storage_layer/facts/load_fct_daily_product_snapshot.sql",
+            "storage_layer/facts/load_fct_customer_behavior_snapshot.sql",
         ])
 
         # 8. create analysis and ML marts
         execute_many([
-            "storage/mart/mart_financial_kpi.sql",
-            "storage/mart/mart_order_bad_review_features.sql",
-            "storage/mart/mart_customer_cluster_features.sql",
-            "storage/mart/mart_seller_cluster_features.sql",
+            "storage_layer/mart/mart_financial_kpi.sql",
+            "storage_layer/mart/mart_order_bad_review_features.sql",
+            "storage_layer/mart/mart_customer_cluster_features.sql",
+            "storage_layer/mart/mart_seller_cluster_features.sql",
+            "storage_layer/mart/mart_late_delivery_features.sql",
         ])
 
         finish_batch(batch_id, "SUCCESS")
@@ -240,7 +241,7 @@ def main():
     parser.add_argument(
         "mode",
         choices=["full", "incremental"],
-        help="full: load data_source/raw; incremental: load data_source/incremental/<batch_name>",
+        help="full: load data_source_layer/raw; incremental: load data_source_layer/incremental/<batch_name>",
     )
     parser.add_argument(
         "batch_name",

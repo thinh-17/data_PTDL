@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Olist Intelligence — Dashboard Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <style>
+    :root{--bg:#080a12;--panel:#111420;--panel2:#151927;--line:#23283a;--muted:#7f879e;--text:#f6f7fb;--violet:#9677ff;--cyan:#34d9c5;--amber:#ffbd59;--red:#ff6b81;--blue:#58a6ff}
+    *{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at 15% 0,#261b4c66 0,transparent 27%),var(--bg);color:var(--text);font-family:Manrope,system-ui,sans-serif;min-height:100vh}
+    button,select{font:inherit}.shell{max-width:1600px;margin:auto;min-height:100vh}.top{height:68px;padding:0 24px;display:flex;align-items:center;border-bottom:1px solid var(--line);background:#090b13db;backdrop-filter:blur(18px);position:sticky;top:0;z-index:20}
+    .brand{display:flex;align-items:center;gap:11px;font-weight:800;letter-spacing:-.03em;margin-right:30px}.mark{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(135deg,var(--violet),#5a35db);box-shadow:0 8px 28px #805dff55}.brand small{display:block;font-weight:500;font-size:9px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-top:2px}
+    nav{display:flex;height:100%;align-items:stretch;gap:2px}.nav{border:0;background:transparent;color:#777f96;padding:0 13px;cursor:pointer;position:relative;font-size:12px;font-weight:700}.nav:hover{color:#cbd0df}.nav.active{color:white}.nav.active:after{content:"";position:absolute;bottom:0;left:14px;right:14px;height:3px;border-radius:3px 3px 0 0;background:var(--violet);box-shadow:0 0 15px var(--violet)}
+    .live{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;color:#8e96ab}.pulse{width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan)}
+    main{padding:22px 24px 35px}.page{display:none;animation:fade .25s ease}.page.active{display:block}@keyframes fade{from{opacity:.35;transform:translateY(4px)}}
+    .headline{display:flex;align-items:end;justify-content:space-between;margin-bottom:17px}.headline h1{font-size:21px;margin:0 0 4px;letter-spacing:-.04em}.headline p{font-size:11px;color:var(--muted);margin:0}.filters{display:flex;gap:8px}.filter{background:#131622;border:1px solid var(--line);color:#b7bdce;border-radius:9px;padding:8px 29px 8px 11px;font-size:10px}
+    .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:12px}.kpi{min-height:109px;padding:14px;border-radius:14px;background:linear-gradient(145deg,#171a28,#10131e);border:1px solid var(--line);position:relative;overflow:hidden}.kpi:before{content:"";position:absolute;width:70px;height:70px;border-radius:50%;right:-25px;top:-28px;background:var(--accent);filter:blur(28px);opacity:.18}.k-top{display:flex;align-items:center;justify-content:space-between;color:#8c94aa;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}.ico{width:25px;height:25px;border-radius:8px;background:color-mix(in srgb,var(--accent) 13%,transparent);color:var(--accent);display:grid;place-items:center;font-size:12px}.val{font-size:23px;font-weight:800;margin-top:10px;letter-spacing:-.055em}.delta{margin-top:5px;font-size:9px;color:var(--muted)}.good{color:var(--cyan)}.bad{color:var(--red)}
+    .grid{display:grid;gap:12px;margin-bottom:12px}.g-64{grid-template-columns:1.65fr 1fr}.g-55{grid-template-columns:1fr 1fr}.g-37{grid-template-columns:.75fr 1.25fr}.card{border:1px solid var(--line);border-radius:15px;background:linear-gradient(145deg,#131622ee,#0f121cee);padding:15px;min-width:0}.card-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:11px}.card h3{margin:0;font-size:11px;letter-spacing:.02em}.card-head span{font-size:9px;color:var(--muted)}.chart{height:220px}.chart.sm{height:155px}
+    .insight{border:1px solid #503ca0;background:linear-gradient(90deg,#2b1f58aa,#131622);padding:11px 14px;border-radius:12px;font-size:10px;color:#c9bfff;margin-bottom:12px}.insight b{color:white}.legend{display:flex;gap:13px;font-size:9px;color:var(--muted);margin-bottom:9px}.dot{width:7px;height:7px;border-radius:2px;display:inline-block;margin-right:5px}
+    table{width:100%;border-collapse:collapse;font-size:10px}th{text-align:left;color:#636b80;text-transform:uppercase;letter-spacing:.07em;font-size:8px;padding:8px;border-bottom:1px solid var(--line)}td{padding:9px 8px;border-bottom:1px solid #1d2130;color:#bac0cf}tr:last-child td{border:0}.rank{color:#555d70}.money{color:#d1c8ff;font-weight:700}.badge{padding:3px 7px;border-radius:20px;font-size:8px;font-weight:700}.low{background:#16352f;color:#55e7c8}.mid{background:#3a2c17;color:#ffd174}.high{background:#401f29;color:#ff8da0}
+    .progress{height:5px;background:#202536;border-radius:9px;overflow:hidden}.progress i{display:block;height:100%;border-radius:9px;background:linear-gradient(90deg,var(--violet),#c2b2ff)}
+    .segments{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.segment{padding:15px;border:1px solid var(--line);border-radius:13px;background:#121521;border-top:2px solid var(--accent)}.segment strong{display:block;font-size:13px}.segment span{font-size:9px;color:var(--muted)}
+    .empty-chart{height:210px;display:grid;place-items:center;color:var(--muted);font-size:11px}.foot{color:#555d70;font-size:8px;text-align:right;margin-top:12px}
+    @media(max-width:1100px){.kpis{grid-template-columns:repeat(3,1fr)}.nav{padding:0 8px}.g-64,.g-55,.g-37{grid-template-columns:1fr}}
+    @media(max-width:720px){.top{height:auto;min-height:62px;flex-wrap:wrap;padding:10px 14px}.brand{margin-right:auto}nav{order:3;width:100%;overflow:auto;height:42px}.live{display:none}main{padding:16px 12px}.headline{align-items:flex-start;gap:12px;flex-direction:column}.kpis{grid-template-columns:repeat(2,1fr)}.segments{grid-template-columns:1fr 1fr}.filters{width:100%;overflow:auto}}
+  </style>
+</head>
+<body>
+<div class="shell">
+  <header class="top">
+    <div class="brand"><div class="mark">◈</div><div>Olist Intelligence<small>Commerce command center</small></div></div>
+    <nav>
+      <button class="nav active" data-page="executive">Executive</button><button class="nav" data-page="revenue">Revenue</button><button class="nav" data-page="sellers">Sellers</button><button class="nav" data-page="products">Products</button><button class="nav" data-page="customers">Customers</button><button class="nav" data-page="quality">Quality & ML</button>
+    </nav>
+    <div class="live"><i class="pulse"></i> Data snapshot · Aug 2018</div>
+  </header>
+  <main>
+    <section class="page active" id="executive">
+      <div class="headline"><div><h1>Business overview</h1><p>Bức tranh tổng quan về tăng trưởng và hiệu quả vận hành</p></div><div class="filters"><select class="filter"><option>Jan 2017 — Aug 2018</option></select><select class="filter"><option>All states</option></select></div></div>
+      <div class="kpis">
+        <div class="kpi" style="--accent:var(--violet)"><div class="k-top">Gross GMV <i class="ico">R$</i></div><div class="val">13.59M</div><div class="delta good">↑ 18.4% year over year</div></div>
+        <div class="kpi" style="--accent:var(--cyan)"><div class="k-top">Orders <i class="ico">▤</i></div><div class="val">99,441</div><div class="delta good">↑ 12.1% year over year</div></div>
+        <div class="kpi" style="--accent:var(--amber)"><div class="k-top">Average order <i class="ico">◎</i></div><div class="val">R$136.7</div><div class="delta good">↑ R$7.2 vs prior year</div></div>
+        <div class="kpi" style="--accent:var(--cyan)"><div class="k-top">Delivery rate <i class="ico">✓</i></div><div class="val">97.02%</div><div class="delta good">96,478 delivered</div></div>
+        <div class="kpi" style="--accent:var(--red)"><div class="k-top">Cancel rate <i class="ico">×</i></div><div class="val">0.63%</div><div class="delta">625 cancelled orders</div></div>
+        <div class="kpi" style="--accent:#f39ad7"><div class="k-top">Freight / GMV <i class="ico">↗</i></div><div class="val">16.57%</div><div class="delta bad">↑ 1.1pp needs attention</div></div>
+      </div>
+      <div class="grid g-64">
+        <article class="card"><div class="card-head"><div><h3>GMV performance</h3><span>Monthly gross merchandise value · R$ thousand</span></div><span>20 months</span></div><div class="chart"><canvas id="gmvChart"></canvas></div></article>
+        <article class="card"><div class="card-head"><div><h3>Order fulfillment</h3><span>Current status distribution</span></div><span>99.4K orders</span></div><div class="chart"><canvas id="statusChart"></canvas></div></article>
+      </div>
+      <div class="grid g-55">
+        <article class="card"><div class="card-head"><div><h3>Freight pressure</h3><span>Freight value as % of item GMV</span></div><span class="bad">+3.4pp range</span></div><div class="chart sm"><canvas id="freightChart"></canvas></div></article>
+        <article class="card"><div class="card-head"><div><h3>Management signals</h3><span>What needs attention this period</span></div></div><div class="insight">◈ <b>Freight ratio reached 17.4%</b> in Aug 2018, above the portfolio average of 16.57%.</div><div class="insight" style="border-color:#265e57;background:linear-gradient(90deg,#153833aa,#131622);color:#8cebd9">✓ Delivery remains healthy at <b>97.02%</b>, supporting customer satisfaction.</div></article>
+      </div>
+    </section>
+
+    <section class="page" id="revenue">
+      <div class="headline"><div><h1>Revenue intelligence</h1><p>Xu hướng, động lực tăng trưởng và chênh lệch mục tiêu</p></div><div class="filters"><select class="filter"><option>Monthly</option></select><select class="filter"><option>All categories</option></select></div></div>
+      <div class="insight">✦ Đỉnh doanh thu xuất hiện vào <b>11/2017 với R$1.01M</b>. Nên loại 09–10/2018 khỏi so sánh vì dữ liệu tháng chưa đầy đủ.</div>
+      <div class="kpis" style="grid-template-columns:repeat(4,1fr)"><div class="kpi" style="--accent:var(--violet)"><div class="k-top">Selected GMV</div><div class="val">R$13.59M</div><div class="delta good">20 complete months</div></div><div class="kpi" style="--accent:var(--blue)"><div class="k-top">Target attainment</div><div class="val">106.3%</div><div class="delta good">R$0.81M above plan</div></div><div class="kpi" style="--accent:var(--red)"><div class="k-top">Lost GMV proxy</div><div class="val">R$86K</div><div class="delta">Cancelled items</div></div><div class="kpi" style="--accent:var(--amber)"><div class="k-top">Peak month</div><div class="val">Nov '17</div><div class="delta">R$1.01M gross GMV</div></div></div>
+      <div class="grid g-55"><article class="card"><div class="card-head"><div><h3>Actual vs target</h3><span>Monthly GMV · target is illustrative</span></div></div><div class="chart"><canvas id="targetChart"></canvas></div></article><article class="card"><div class="card-head"><div><h3>Growth decomposition</h3><span>Order volume vs AOV contribution</span></div></div><div class="chart"><canvas id="driverChart"></canvas></div></article></div>
+    </section>
+
+    <section class="page" id="sellers">
+      <div class="headline"><div><h1>Seller performance</h1><p>Đóng góp doanh thu, chất lượng và rủi ro tập trung</p></div><div class="filters"><select class="filter"><option>Top 10 sellers</option></select></div></div>
+      <div class="kpis" style="grid-template-columns:repeat(4,1fr)"><div class="kpi" style="--accent:var(--violet)"><div class="k-top">Active sellers</div><div class="val">3,095</div></div><div class="kpi" style="--accent:var(--red)"><div class="k-top">Top 10 share</div><div class="val">22.4%</div><div class="delta bad">Concentration watch</div></div><div class="kpi" style="--accent:var(--amber)"><div class="k-top">Avg review</div><div class="val">4.09★</div></div><div class="kpi" style="--accent:var(--cyan)"><div class="k-top">Healthy sellers</div><div class="val">96.8%</div></div></div>
+      <div class="grid g-37"><article class="card"><div class="card-head"><div><h3>Seller concentration</h3><span>Top 10 vs long tail</span></div></div><div class="chart"><canvas id="sellerShareChart"></canvas></div></article><article class="card"><div class="card-head"><div><h3>Seller leaderboard</h3><span>Ranked by gross GMV</span></div></div><table><thead><tr><th>#</th><th>Seller</th><th>GMV</th><th>Share</th><th>Cancel</th><th>Review</th><th>Risk</th></tr></thead><tbody><tr><td class="rank">01</td><td>7c67e144...</td><td class="money">R$229K</td><td>1.69%</td><td>0.2%</td><td>4.7</td><td><span class="badge low">Low</span></td></tr><tr><td class="rank">02</td><td>1025f0e2...</td><td class="money">R$223K</td><td>1.64%</td><td>0.6%</td><td>4.3</td><td><span class="badge low">Low</span></td></tr><tr><td class="rank">03</td><td>4a3ca931...</td><td class="money">R$201K</td><td>1.48%</td><td>1.4%</td><td>3.9</td><td><span class="badge mid">Medium</span></td></tr><tr><td class="rank">04</td><td>1f50f920...</td><td class="money">R$198K</td><td>1.46%</td><td>3.2%</td><td>3.1</td><td><span class="badge high">High</span></td></tr><tr><td class="rank">05</td><td>53243585...</td><td class="money">R$190K</td><td>1.40%</td><td>0.4%</td><td>4.6</td><td><span class="badge low">Low</span></td></tr></tbody></table></article></div>
+    </section>
+
+    <section class="page" id="products">
+      <div class="headline"><div><h1>Product & category</h1><p>Danh mục chủ lực và tốc độ bán sản phẩm</p></div><div class="filters"><select class="filter"><option>All categories</option></select></div></div>
+      <div class="kpis" style="grid-template-columns:repeat(4,1fr)"><div class="kpi" style="--accent:var(--violet)"><div class="k-top">Categories</div><div class="val">73</div></div><div class="kpi" style="--accent:var(--blue)"><div class="k-top">Products</div><div class="val">32,951</div></div><div class="kpi" style="--accent:var(--cyan)"><div class="k-top">Items sold</div><div class="val">112,650</div></div><div class="kpi" style="--accent:var(--amber)"><div class="k-top">Top category</div><div class="val" style="font-size:17px">Health & beauty</div><div class="delta">R$1.26M GMV</div></div></div>
+      <div class="grid g-64"><article class="card"><div class="card-head"><div><h3>Category gross GMV</h3><span>Top eight · R$ thousand</span></div></div><div class="chart" style="height:300px"><canvas id="categoryChart"></canvas></div></article><article class="card"><div class="card-head"><div><h3>Sales velocity</h3><span>Items sold by top category</span></div></div><table><thead><tr><th>Category</th><th>Units</th><th>Relative velocity</th></tr></thead><tbody id="velocityRows"></tbody></table></article></div>
+    </section>
+
+    <section class="page" id="customers">
+      <div class="headline"><div><h1>Customer value</h1><p>Phân khúc hành vi và cơ hội giữ chân khách hàng</p></div><div class="filters"><select class="filter"><option>All clusters</option></select></div></div>
+      <div class="kpis" style="grid-template-columns:repeat(4,1fr)"><div class="kpi" style="--accent:var(--violet)"><div class="k-top">Customers</div><div class="val">96,096</div></div><div class="kpi" style="--accent:var(--amber)"><div class="k-top">Avg spend</div><div class="val">R$141</div></div><div class="kpi" style="--accent:var(--cyan)"><div class="k-top">Repeat buyers</div><div class="val">3.1%</div><div class="delta bad">Retention opportunity</div></div><div class="kpi" style="--accent:#f39ad7"><div class="k-top">Avg review</div><div class="val">4.09★</div></div></div>
+      <div class="insight">◈ Tệp khách hàng chủ yếu mua một lần. Ưu tiên chiến dịch tái kích hoạt cho nhóm <b>returning customers</b> và nhóm có AOV cao.</div>
+      <div class="segments"><div class="segment" style="--accent:var(--violet)"><strong>Premium</strong><span>Avg spend R$985 · high AOV</span></div><div class="segment" style="--accent:var(--cyan)"><strong>Loyal</strong><span>2.24 orders · 159 days return</span></div><div class="segment" style="--accent:var(--amber)"><strong>One-time</strong><span>1.02 orders · R$110 spend</span></div><div class="segment" style="--accent:var(--red)"><strong>At-risk</strong><span>Low review · cancellations</span></div></div>
+      <div class="grid g-55" style="margin-top:12px"><article class="card"><div class="card-head"><div><h3>Average spend by cluster</h3><span>K-means · 4 clusters</span></div></div><div class="chart"><canvas id="customerChart"></canvas></div></article><article class="card"><div class="card-head"><div><h3>Cluster profile</h3><span>Behavioral comparison</span></div></div><div class="chart"><canvas id="clusterRadar"></canvas></div></article></div>
+    </section>
+
+    <section class="page" id="quality">
+      <div class="headline"><div><h1>Service quality & ML</h1><p>Review health và khả năng nhận diện đơn có nguy cơ đánh giá xấu</p></div><div class="filters"><select class="filter"><option>Bad review ≤ 2★</option></select></div></div>
+      <div class="kpis" style="grid-template-columns:repeat(5,1fr)"><div class="kpi" style="--accent:var(--amber)"><div class="k-top">Avg review</div><div class="val">4.09★</div></div><div class="kpi" style="--accent:var(--red)"><div class="k-top">Bad review rate</div><div class="val">14.69%</div></div><div class="kpi" style="--accent:var(--blue)"><div class="k-top">Model accuracy</div><div class="val">84.29%</div></div><div class="kpi" style="--accent:var(--cyan)"><div class="k-top">Bad-review precision</div><div class="val">45.74%</div></div><div class="kpi" style="--accent:var(--violet)"><div class="k-top">Bad-review recall</div><div class="val">39.70%</div><div class="delta bad">Needs model improvement</div></div></div>
+      <div class="grid g-55"><article class="card"><div class="card-head"><div><h3>Review distribution</h3><span>Actual review records</span></div></div><div class="chart"><canvas id="reviewChart"></canvas></div></article><article class="card"><div class="card-head"><div><h3>Risk drivers</h3><span>Operational features used by model</span></div></div><table><thead><tr><th>Feature</th><th>Business meaning</th><th>Priority</th></tr></thead><tbody><tr><td>Waiting days</td><td>Long fulfillment duration</td><td><span class="badge high">High</span></td></tr><tr><td>Late delivery</td><td>Delivered after estimate</td><td><span class="badge high">High</span></td></tr><tr><td>Freight ratio</td><td>Shipping cost pressure</td><td><span class="badge mid">Medium</span></td></tr><tr><td>Item count</td><td>Order complexity</td><td><span class="badge mid">Medium</span></td></tr><tr><td>Installments</td><td>Payment behavior</td><td><span class="badge low">Low</span></td></tr></tbody></table></article></div>
+    </section>
+    <div class="foot">UI concept · Olist Data Warehouse · Values are sourced from the project dataset; target and some seller risk annotations are illustrative.</div>
+  </main>
+</div>
+<script>
+const months=['Jan 17','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan 18','Feb','Mar','Apr','May','Jun','Jul','Aug'];
+const gmv=[120,247,374,360,506,433,498,574,624,664,1010,744,950,844,983,997,997,865,896,855];
+const freight=[14,15.8,15.4,14.6,15.8,16.1,17.5,16.4,15.4,15.8,16.7,16.1,16.6,16.9,17.5,16.4,15.4,18.2,18.2,17.4];
+const colors={grid:'#222738',tick:'#697187',violet:'#9677ff',cyan:'#34d9c5',amber:'#ffbd59',red:'#ff6b81',blue:'#58a6ff'};
+Chart.defaults.font.family='Manrope';Chart.defaults.color=colors.tick;
+const charts={};
+const baseScales={x:{grid:{display:false},ticks:{maxTicksLimit:8,font:{size:9}}},y:{grid:{color:colors.grid},ticks:{font:{size:9}}}};
+function chart(id,config){const el=document.getElementById(id);if(!el||charts[id])return;charts[id]=new Chart(el,config)}
+function init(page){
+ if(page==='executive'){
+  chart('gmvChart',{type:'line',data:{labels:months,datasets:[{data:gmv,borderColor:colors.violet,backgroundColor:'rgba(150,119,255,.11)',fill:true,tension:.35,pointRadius:2,pointBackgroundColor:colors.violet,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:baseScales}});
+  chart('statusChart',{type:'doughnut',data:{labels:['Delivered','Shipped','Cancelled','Unavailable & other'],datasets:[{data:[96478,1107,625,1231],backgroundColor:[colors.violet,colors.amber,colors.red,'#30364a'],borderWidth:0,spacing:3,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,cutout:'68%',plugins:{legend:{position:'bottom',labels:{boxWidth:7,boxHeight:7,font:{size:9},padding:13}}}}});
+  chart('freightChart',{type:'line',data:{labels:months,datasets:[{data:freight,borderColor:'#f39ad7',backgroundColor:'rgba(243,154,215,.08)',fill:true,tension:.35,pointRadius:0,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{...baseScales,y:{min:12,max:20,grid:{color:colors.grid},ticks:{callback:v=>v+'%',font:{size:9}}}}}})
+ }
+ if(page==='revenue'){
+  chart('targetChart',{type:'line',data:{labels:months,datasets:[{label:'Actual',data:gmv,borderColor:colors.violet,tension:.35,pointRadius:1,borderWidth:2},{label:'Target',data:gmv.map((v,i)=>Math.round(v*[.9,.91,.92,.93][i%4])),borderColor:colors.red,borderDash:[5,4],tension:.35,pointRadius:0,borderWidth:1.5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:8,font:{size:9}}}},scales:baseScales}});
+  chart('driverChart',{type:'bar',data:{labels:months.slice(10),datasets:[{label:'Order volume',data:[65,61,74,70,68,72,76,64,67,70],backgroundColor:colors.violet,borderRadius:3},{label:'AOV',data:[35,39,26,30,32,28,24,36,33,30],backgroundColor:colors.cyan,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:8,font:{size:9}}}},scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:9}}},y:{stacked:true,grid:{color:colors.grid},ticks:{callback:v=>v+'%',font:{size:9}}}}}})
+ }
+ if(page==='sellers')chart('sellerShareChart',{type:'doughnut',data:{labels:['Top 10 sellers','Other sellers'],datasets:[{data:[22.4,77.6],backgroundColor:[colors.violet,'#292e40'],borderWidth:0,spacing:3}]},options:{responsive:true,maintainAspectRatio:false,cutout:'68%',plugins:{legend:{position:'bottom',labels:{boxWidth:8,font:{size:9}}}}}});
+ if(page==='products')chart('categoryChart',{type:'bar',data:{labels:['Health & beauty','Watches & gifts','Bed bath table','Sports leisure','Computers','Furniture decor','Cool stuff','Housewares'],datasets:[{data:[1259,1205,1037,988,912,730,635,632],backgroundColor:['#9677ff','#34d9c5','#ffbd59','#58a6ff','#ef7fc3','#ff6b81','#68d391','#9f7aea'],borderRadius:5}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:colors.grid},ticks:{callback:v=>'R$'+v+'K',font:{size:9}}},y:{grid:{display:false},ticks:{font:{size:9}}}}}});
+ if(page==='customers'){
+  chart('customerChart',{type:'bar',data:{labels:['One-time','Loyal','Premium','At-risk'],datasets:[{data:[110,267,985,174],backgroundColor:[colors.amber,colors.cyan,colors.violet,colors.red],borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{color:colors.grid},ticks:{callback:v=>'R$'+v}}}}});
+  chart('clusterRadar',{type:'radar',data:{labels:['Spend','Orders','AOV','Review','Return'],datasets:[{data:[95,42,100,75,20],borderColor:colors.violet,backgroundColor:'rgba(150,119,255,.18)',pointRadius:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{r:{grid:{color:colors.grid},angleLines:{color:colors.grid},ticks:{display:false},pointLabels:{font:{size:9}}}}}})
+ }
+ if(page==='quality')chart('reviewChart',{type:'bar',data:{labels:['1 star','2 stars','3 stars','4 stars','5 stars'],datasets:[{data:[11858,3235,8287,19142,57328],backgroundColor:[colors.red,'#f28b63',colors.amber,colors.blue,colors.cyan],borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:baseScales}})
+}
+document.querySelectorAll('.nav').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.nav').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));btn.classList.add('active');document.getElementById(btn.dataset.page).classList.add('active');setTimeout(()=>init(btn.dataset.page),20)}));
+const cats=['health_beauty','watches_gifts','bed_bath_table','sports_leisure','computers_accessories','furniture_decor','cool_stuff','housewares'], units=[9670,5991,11115,8641,7827,8334,3796,6964], max=Math.max(...units);document.getElementById('velocityRows').innerHTML=cats.map((c,i)=>`<tr><td>${c.replaceAll('_',' ')}</td><td class="money">${units[i].toLocaleString()}</td><td><div class="progress"><i style="width:${units[i]/max*100}%"></i></div></td></tr>`).join('');
+init('executive');
+</script>
+</body>
+</html>
