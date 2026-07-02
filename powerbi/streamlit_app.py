@@ -1000,7 +1000,7 @@ st.sidebar.caption("Bảng chính được dùng: fact/dim/snapshot/mart trong s
 # =========================
 # TABS
 # =========================
-tabs = st.tabs(["Executive", "Revenue", "Sellers", "Products", "Customers", "Quality & ML"])
+tabs = st.tabs(["Executive", "Revenue", "Sellers", "Products", "Customers"])
 
 
 # =========================
@@ -1059,63 +1059,64 @@ with tabs[0]:
         else:
             empty_state("Chưa có dữ liệu trạng thái đơn hàng.")
 
-    col3, col4 = st.columns([1, 1])
-    with col3:
-        st.subheader("Cancellation rate")
-        if not monthly_view.empty:
-            fig = px.line(
-                monthly_view,
-                x="month_date",
-                y="cancellation_rate",
-                markers=True,
-                labels={"month_date": "Tháng", "cancellation_rate": "Cancellation rate (%)"},
-            )
-            fig.update_layout(template="plotly_dark", height=280, margin=dict(l=10, r=10, t=10, b=10))
-            st.plotly_chart(fig, use_container_width=True)
-    with col4:
-        st.subheader("Freight pressure")
-        if not freight_df.empty and "freight_ratio" in freight_df.columns:
-            fig = px.line(freight_df, x="month_date", y="freight_ratio", markers=True)
-            fig.update_layout(template="plotly_dark", height=280, margin=dict(l=10, r=10, t=10, b=10))
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            empty_state("Chưa tìm thấy cột freight_ratio trong storage.mart_financial_kpi. Có thể thêm mart này sau.")
-
 
 # =========================
 # REVENUE
 # =========================
 with tabs[1]:
-    header("Revenue intelligence", "Xu hướng, động lực tăng trưởng và chênh lệch mục tiêu")
+    header(
+        "Revenue intelligence",
+        "Động lực doanh thu: số lượng đơn hàng và giá trị trung bình mỗi đơn"
+    )
 
     if monthly_view.empty:
         empty_state("Chưa có dữ liệu doanh thu theo tháng.")
     else:
         revenue_view = monthly_view.copy().sort_values("month_date")
+        revenue_view = revenue_view[revenue_view["revenue"] >= 0].copy()
+
+        selected_gmv = safe_sum(revenue_view, "revenue")
+        selected_orders = safe_sum(revenue_view, "orders")
+        active_months = len(revenue_view[revenue_view["revenue"] > 0])
+
+        avg_monthly_gmv = selected_gmv / active_months if active_months else 0
+        avg_aov = selected_gmv / selected_orders if selected_orders else 0
+
         peak = revenue_view.loc[revenue_view["revenue"].idxmax()]
 
-        # Target chỉ dùng để minh họa quản trị.
-        # Nếu sau này có bảng target thật trong DW thì thay phần này bằng query từ PostgreSQL.
-        target_factors = [0.90, 0.91, 0.92, 0.93]
-        revenue_view["target_revenue"] = [
-            float(v) * target_factors[i % len(target_factors)]
-            for i, v in enumerate(revenue_view["revenue"].fillna(0))
-        ]
+        valid_revenue_view = revenue_view[
+            (revenue_view["revenue"] > 0)
+            & (revenue_view["orders"] > 0)
+        ].copy()
 
-        total_target = safe_sum(revenue_view, "target_revenue")
-        target_attainment = total_revenue * 100 / total_target if total_target else 0
-        target_gap = total_revenue - total_target
+        # Tính mức liên hệ giữa GMV với Order Count và AOV
+        order_corr = 0.0
+        aov_corr = 0.0
 
-        # Lost GMV proxy: ưu tiên lấy doanh thu cancelled nếu status_df có cột revenue.
-        # Nếu không có thì ước tính theo tỷ lệ cancelled_orders.
-        lost_gmv_proxy = 0.0
+        if len(valid_revenue_view) >= 3:
+            if valid_revenue_view["orders"].nunique() > 1:
+                order_corr = valid_revenue_view["revenue"].corr(valid_revenue_view["orders"])
 
-        if not status_df.empty and {"order_status", "revenue"}.issubset(status_df.columns):
-            cancelled_mask = status_df["order_status"].astype(str).str.lower().eq("cancelled")
-            lost_gmv_proxy = safe_sum(status_df.loc[cancelled_mask], "revenue")
+            if valid_revenue_view["aov"].nunique() > 1:
+                aov_corr = valid_revenue_view["revenue"].corr(valid_revenue_view["aov"])
 
-        if lost_gmv_proxy == 0 and total_orders:
-            lost_gmv_proxy = total_revenue * cancelled_orders / total_orders
+        order_corr = 0.0 if pd.isna(order_corr) else float(order_corr)
+        aov_corr = 0.0 if pd.isna(aov_corr) else float(aov_corr)
+
+        if abs(order_corr) >= abs(aov_corr):
+            primary_driver = "Order-led"
+            driver_note = f"Order corr {order_corr:.2f} · AOV corr {aov_corr:.2f}"
+            driver_insight = (
+                "GMV có xu hướng biến động gần với số lượng đơn hàng hơn AOV, "
+                "cho thấy tăng trưởng doanh thu phụ thuộc nhiều vào quy mô giao dịch."
+            )
+        else:
+            primary_driver = "AOV-led"
+            driver_note = f"AOV corr {aov_corr:.2f} · Order corr {order_corr:.2f}"
+            driver_insight = (
+                "GMV có xu hướng biến động gần với AOV hơn số lượng đơn hàng, "
+                "cho thấy giá trị trung bình mỗi đơn đóng vai trò lớn hơn trong doanh thu."
+            )
 
         st.markdown(
             f"""
@@ -1123,35 +1124,34 @@ with tabs[1]:
                 ✦ Đỉnh doanh thu trong khoảng lọc là 
                 <b>{money(peak['revenue'])}</b> vào 
                 <b>{peak['month_label']}</b>. 
-                Target trong trang này là mức minh họa để so sánh actual vs target.
+                {driver_insight}
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        # 4 KPI card giống layout HTML preview
+        # KPI cards
         c1, c2, c3, c4 = st.columns(4)
 
         with c1:
             kpi_card(
                 "Selected GMV",
-                money(total_revenue),
-                f"{len(revenue_view)} tháng được chọn",
+                money(selected_gmv),
+                f"{active_months} tháng có doanh thu",
             )
 
         with c2:
-            gap_note = f"{money(abs(target_gap))} {'above plan' if target_gap >= 0 else 'below plan'}"
             kpi_card(
-                "Target attainment",
-                pct(target_attainment),
-                gap_note,
+                "Primary driver",
+                primary_driver,
+                driver_note,
             )
 
         with c3:
             kpi_card(
-                "Lost GMV proxy",
-                money(lost_gmv_proxy),
-                "Ước tính từ đơn cancelled",
+                "Avg monthly GMV",
+                money(avg_monthly_gmv),
+                "Doanh thu TB / tháng",
             )
 
         with c4:
@@ -1161,119 +1161,129 @@ with tabs[1]:
                 money(peak["revenue"]),
             )
 
-        # Chỉ giữ 2 biểu đồ
         col1, col2 = st.columns(2)
 
+        # =========================
+        # Chart 1: GMV vs Order Volume
+        # =========================
         with col1:
-            st.subheader("Actual vs target")
+            st.subheader("GMV vs order volume")
+            st.caption("Mỗi điểm là một tháng · kích thước thể hiện AOV")
 
-            actual_target_df = revenue_view[
-                ["month_date", "revenue", "target_revenue"]
-            ].melt(
-                id_vars="month_date",
-                value_vars=["revenue", "target_revenue"],
-                var_name="series",
-                value_name="gmv",
-            )
+            scatter_df = valid_revenue_view.copy()
 
-            actual_target_df["series"] = actual_target_df["series"].replace(
-                {
-                    "revenue": "Actual",
-                    "target_revenue": "Target",
-                }
-            )
+            if scatter_df.empty:
+                empty_state("Chưa đủ dữ liệu để vẽ quan hệ GMV và số đơn.")
+            else:
+                fig = px.scatter(
+                    scatter_df,
+                    x="orders",
+                    y="revenue",
+                    size="aov",
+                    color="aov",
+                    hover_name="month_label",
+                    size_max=28,
+                    color_continuous_scale=["#34d9c5", "#9677ff", "#ffbd59"],
+                    labels={
+                        "orders": "Order count",
+                        "revenue": "GMV",
+                        "aov": "AOV",
+                    },
+                )
 
-            fig = px.line(
-                actual_target_df,
-                x="month_date",
-                y="gmv",
-                color="series",
-                markers=True,
-                labels={
-                    "month_date": "Tháng",
-                    "gmv": "GMV",
-                    "series": "",
-                },
-            )
+                fig.update_traces(
+                    marker=dict(
+                        line=dict(width=1, color="#dbe2f1"),
+                        opacity=0.82,
+                    ),
+                    hovertemplate=(
+                        "<b>%{hovertext}</b><br>"
+                        "Orders: %{x:,.0f}<br>"
+                        "GMV: R$%{y:,.0f}<br>"
+                        "AOV: R$%{marker.size:,.0f}"
+                        "<extra></extra>"
+                    ),
+                )
 
-            fig.update_layout(
-                template="plotly_dark",
-                height=390,
-                margin=dict(l=10, r=10, t=10, b=10),
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.02,
-                    xanchor="center",
-                    x=0.5,
-                ),
-            )
+                fig.update_layout(
+                    template="plotly_dark",
+                    height=390,
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    coloraxis_colorbar=dict(
+                        title="AOV",
+                        tickprefix="R$",
+                    ),
+                    xaxis=dict(
+                        title="Order count",
+                        gridcolor="#23283a",
+                    ),
+                    yaxis=dict(
+                        title="GMV",
+                        tickprefix="R$",
+                        tickformat="~s",
+                        gridcolor="#23283a",
+                    ),
+                )
 
-            st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True)
 
+        # =========================
+        # Chart 2: AOV Movement
+        # =========================
         with col2:
-            st.subheader("Growth decomposition")
+            st.subheader("AOV movement")
+            st.caption("Giá trị trung bình mỗi đơn hàng theo tháng")
 
-            driver_df = revenue_view.copy()
+            aov_df = valid_revenue_view.copy()
 
-            driver_df["order_growth_abs"] = (
-                driver_df["orders"].pct_change().abs().fillna(0)
-            )
+            if aov_df.empty:
+                empty_state("Chưa đủ dữ liệu để vẽ AOV theo tháng.")
+            else:
+                fig = px.line(
+                    aov_df,
+                    x="month_date",
+                    y="aov",
+                    markers=True,
+                    labels={
+                        "month_date": "Tháng",
+                        "aov": "AOV",
+                    },
+                )
 
-            driver_df["aov_growth_abs"] = (
-                driver_df["aov"].pct_change().abs().fillna(0)
-            )
+                fig.update_traces(
+                    line=dict(width=3),
+                    marker=dict(size=8),
+                    hovertemplate="<b>%{x|%b %Y}</b><br>AOV: R$%{y:,.0f}<extra></extra>",
+                )
 
-            denom = (
-                driver_df["order_growth_abs"] + driver_df["aov_growth_abs"]
-            ).replace(0, pd.NA)
+                fig.add_hline(
+                    y=avg_aov,
+                    line_dash="dash",
+                    annotation_text=f"Avg AOV {money(avg_aov)}",
+                    annotation_position="top left",
+                )
 
-            driver_df["Order volume"] = (
-                driver_df["order_growth_abs"] * 100 / denom
-            ).fillna(50)
+                fig.update_layout(
+                    template="plotly_dark",
+                    height=390,
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    showlegend=False,
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    xaxis=dict(
+                        title="Tháng",
+                        gridcolor="rgba(0,0,0,0)",
+                    ),
+                    yaxis=dict(
+                        title="AOV",
+                        tickprefix="R$",
+                        gridcolor="#23283a",
+                    ),
+                )
 
-            driver_df["AOV"] = 100 - driver_df["Order volume"]
-
-            # Lấy 10 tháng cuối để biểu đồ gọn giống dashboard preview
-            driver_df = driver_df.tail(10)
-
-            driver_long = driver_df[
-                ["month_date", "Order volume", "AOV"]
-            ].melt(
-                id_vars="month_date",
-                value_vars=["Order volume", "AOV"],
-                var_name="driver",
-                value_name="contribution",
-            )
-
-            fig = px.bar(
-                driver_long,
-                x="month_date",
-                y="contribution",
-                color="driver",
-                labels={
-                    "month_date": "Tháng",
-                    "contribution": "Contribution (%)",
-                    "driver": "",
-                },
-            )
-
-            fig.update_layout(
-                template="plotly_dark",
-                height=390,
-                barmode="stack",
-                yaxis_range=[0, 100],
-                margin=dict(l=10, r=10, t=10, b=10),
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.02,
-                    xanchor="center",
-                    x=0.5,
-                ),
-            )
-
-            st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True)
 
 
 # =========================
@@ -1317,8 +1327,60 @@ with tabs[2]:
                     "revenue": [top10_revenue, max(seller_total_revenue - top10_revenue, 0)],
                 }
             )
-            fig = px.pie(share_df, names="group", values="revenue", hole=0.62)
-            fig.update_layout(template="plotly_dark", height=420, margin=dict(l=10, r=10, t=10, b=10))
+            fig = px.pie(
+                share_df,
+                names="group",
+                values="revenue",
+                hole=0.62,
+                color="group",
+                color_discrete_map={
+                    "Top 10 sellers": "#ffbd59",   # màu vàng cam nổi bật
+                    "Other sellers": "#52607a",  # xám xanh sáng hơn
+                },
+            )
+
+            fig.update_traces(
+                textinfo="percent",
+                textposition="inside",
+                textfont=dict(
+                    size=13,
+                    color="#ffffff",
+                ),
+                marker=dict(
+                    line=dict(
+                        color="#080a12",
+                        width=2,
+                    )
+                ),
+                pull=[0.04 if g == "Top 10 sellers" else 0 for g in share_df["group"]],
+                hovertemplate="<b>%{label}</b><br>GMV: R$%{value:,.0f}<br>Share: %{percent}<extra></extra>",
+            )
+
+            fig.update_layout(
+                template="plotly_dark",
+                height=420,
+                margin=dict(l=10, r=10, t=10, b=10),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                legend=dict(
+                    orientation="v",
+                    yanchor="top",
+                    y=0.98,
+                    xanchor="right",
+                    x=1.02,
+                    font=dict(size=12),
+                ),
+                annotations=[
+                    dict(
+                        text="Top 10<br>13.15%",
+                        x=0.5,
+                        y=0.5,
+                        font=dict(size=18, color="#f6f7fb"),
+                        showarrow=False,
+                    )
+                ],
+            )
+
             st.plotly_chart(fig, use_container_width=True)
 
         st.subheader("Seller leaderboard")
@@ -1649,64 +1711,3 @@ with tabs[4]:
             )
 
             st.plotly_chart(fig, use_container_width=True)
-
-
-# =========================
-# QUALITY & ML
-# =========================
-with tabs[5]:
-    header("Service quality & ML", "Review health và khả năng nhận diện đơn có nguy cơ đánh giá xấu")
-
-    total_reviews = safe_sum(review_df, "review_count")
-    avg_review = 0.0
-    if not review_df.empty:
-        avg_review = (review_df["review_score"] * review_df["review_count"]).sum() / total_reviews
-
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        kpi_card("Avg review", f"{avg_review:.2f}★", "Điểm review trung bình")
-    with c2:
-        kpi_card("Bad review rate", pct(bad_review_rate), "Review ≤ 2★")
-    with c3:
-        if not model_metrics.empty:
-            acc = model_metrics[(model_metrics["metric_name"].str.lower() == "accuracy")]["metric_value"].head(1)
-            kpi_card("Model accuracy", pct(float(acc.iloc[0]) * 100 if not acc.empty and float(acc.iloc[0]) <= 1 else float(acc.iloc[0]) if not acc.empty else 0), "Từ storage.ml_model_metrics")
-        else:
-            kpi_card("Model metrics", "N/A", "Chưa có bảng storage.ml_model_metrics")
-    with c4:
-        kpi_card("Reviews", f"{int(total_reviews):,}", "Số bản ghi review")
-
-    col1, col2 = st.columns([1.1, 1])
-    with col1:
-        st.subheader("Review distribution")
-        if not review_df.empty:
-            fig = px.bar(review_df, x="review_score", y="review_count")
-            fig.update_layout(template="plotly_dark", height=380, margin=dict(l=10, r=10, t=10, b=10))
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            empty_state("Chưa có dữ liệu review.")
-    with col2:
-        st.subheader("Risk drivers")
-        st.dataframe(
-            pd.DataFrame(
-                [
-                    ["Waiting days", "Thời gian xử lý/giao hàng dài", "High"],
-                    ["Late delivery", "Giao sau ngày dự kiến", "High"],
-                    ["Freight ratio", "Áp lực phí vận chuyển", "Medium"],
-                    ["Item count", "Độ phức tạp đơn hàng", "Medium"],
-                    ["Installments", "Hành vi thanh toán", "Low"],
-                ],
-                columns=["Feature", "Business meaning", "Priority"],
-            ),
-            hide_index=True,
-            use_container_width=True,
-        )
-
-    if not model_metrics.empty:
-        st.subheader("ML model metrics")
-        st.dataframe(model_metrics, use_container_width=True, hide_index=True)
-    else:
-        st.info(
-            "Nếu muốn hiển thị Accuracy/Precision/Recall/F1 trực tiếp từ PostgreSQL, hãy tạo bảng storage.ml_model_metrics "
-            "hoặc lưu kết quả model vào một mart riêng."
-        )
