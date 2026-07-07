@@ -68,3 +68,35 @@ CREATE TABLE IF NOT EXISTS storage.dim_review_score (
     review_score INT UNIQUE,
     score_label TEXT
 );
+
+
+DROP TABLE IF EXISTS storage.dim_category_financial_assumption CASCADE;
+
+CREATE TABLE storage.dim_category_financial_assumption (
+    category_financial_key SERIAL PRIMARY KEY,
+    product_category_name_english TEXT NOT NULL UNIQUE,
+    estimated_cogs_rate NUMERIC(6,4) NOT NULL,
+    estimated_tax_rate NUMERIC(6,4) NOT NULL,
+    version INT DEFAULT 1,
+    is_current BOOLEAN DEFAULT TRUE
+);
+
+INSERT INTO storage.dim_category_financial_assumption
+(
+    product_category_name_english,
+    estimated_cogs_rate,
+    estimated_tax_rate
+)
+SELECT
+    category_list.product_category_name_english,
+
+    COALESCE(r.estimated_cogs_rate, 0.6500) AS estimated_cogs_rate,
+    COALESCE(r.estimated_tax_rate, 0.0800) AS estimated_tax_rate
+
+FROM (
+    SELECT DISTINCT
+        COALESCE(product_category_name_english) AS product_category_name_english
+    FROM storage.dim_product
+) category_list
+LEFT JOIN raw.category_financial_assumption r
+    ON category_list.product_category_name_english = r.product_category_name_english;

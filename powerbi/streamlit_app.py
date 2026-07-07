@@ -298,17 +298,26 @@ def get_monthly_kpi() -> pd.DataFrame:
 
 
 def get_order_status() -> pd.DataFrame:
+
     sql = """
         SELECT
-            COALESCE(od.order_status, 'unknown') AS order_status,
+            CASE
+                WHEN od.order_status IN ('delivered', 'canceled', 'shipped')
+                    THEN od.order_status
+                ELSE 'others'
+            END AS order_status,
+
             COUNT(DISTINCT f.order_id)::numeric AS order_count,
             SUM(COALESCE(f.order_value, 0))::numeric AS revenue
+
         FROM storage.fct_order f
         JOIN storage.dim_order_detail od
-          ON f.order_detail_key = od.order_detail_key
+            ON f.order_detail_key = od.order_detail_key
+
         GROUP BY 1
-        ORDER BY order_count DESC
+        ORDER BY order_count DESC;
     """
+
     return read_sql_safe(sql)
 
 
@@ -350,6 +359,45 @@ def get_freight_monthly() -> pd.DataFrame:
             return df
 
     return pd.DataFrame()
+
+def get_monthly_profitability() -> pd.DataFrame:
+    """
+    Monthly profitability from fct_daily_product_snapshot.
+    Dùng các cột mới: estimated_cogs, estimated_tax, gross_profit.
+    """
+    if not table_exists("storage", "fct_daily_product_snapshot"):
+        return pd.DataFrame()
+
+    sql = """
+        SELECT
+            date_trunc('month', d.full_date)::date AS month_date,
+            to_char(date_trunc('month', d.full_date), 'Mon YYYY') AS month_label,
+
+            SUM(COALESCE(fp.total_revenue, 0))::numeric AS gmv,
+            SUM(COALESCE(fp.estimated_cogs, 0))::numeric AS estimated_cogs,
+            SUM(COALESCE(fp.estimated_tax, 0))::numeric AS estimated_tax,
+            SUM(COALESCE(fp.gross_profit, 0))::numeric AS gross_profit,
+
+            (
+                SUM(COALESCE(fp.gross_profit, 0))
+                / NULLIF(SUM(COALESCE(fp.total_revenue, 0)), 0)
+                * 100
+            )::numeric AS gross_margin,
+
+            (
+                SUM(COALESCE(fp.total_revenue, 0))
+                - SUM(COALESCE(fp.estimated_cogs, 0))
+                - SUM(COALESCE(fp.estimated_tax, 0))
+            )::numeric AS remaining_after_cogs_tax
+
+        FROM storage.fct_daily_product_snapshot fp
+        JOIN storage.dim_date d
+            ON fp.snapshot_date_key = d.date_key
+        GROUP BY 1, 2
+        ORDER BY 1;
+    """
+
+    return read_sql_safe(sql)
 
 def get_seller_top(limit: int = 10) -> pd.DataFrame:
     limit = int(limit)
@@ -404,7 +452,7 @@ def get_seller_top(limit: int = 10) -> pd.DataFrame:
         df["avg_review_score"] = df["review"]
 
         # Cột hiển thị
-        df["seller_short"] = df["seller"].astype(str).str.slice(0, 8) + "..."
+        df["seller_short"] = [f"Seller {i+1}" for i in range(len(df))]
 
         # Risk
         df["risk"] = df.apply(seller_risk_level, axis=1)
@@ -706,6 +754,73 @@ def get_category_top(limit: int = 10) -> pd.DataFrame:
         df["aov_proxy"] = df["revenue"] / df["items_sold"].replace(0, pd.NA)
     return df
 
+def get_all_category() -> pd.DataFrame:
+    sql = """
+        SELECT
+            COALESCE(dp.product_category_name_english, 'unknown') AS category,
+
+            SUM(COALESCE(fp.total_revenue, 0))::numeric AS revenue,
+
+            SUM(COALESCE(fp.gross_profit, 0))::numeric AS gross_profit,
+
+            SUM(COALESCE(fp.gross_margin, 0))::numeric AS gross_margin,
+
+            SUM(COALESCE(fp.items_sold_cnt, 0))::numeric AS items_sold,
+
+            AVG(NULLIF(fp.avg_review_score, 0))::numeric AS avg_review_score
+
+        FROM storage.fct_daily_product_snapshot fp
+
+        LEFT JOIN storage.dim_product dp
+            ON fp.product_key = dp.product_key
+
+        GROUP BY 1
+    """
+
+    df = read_sql_safe(sql)
+
+    if df.empty:
+        return df
+
+    df["aov_proxy"] = (
+        df["revenue"] /
+        df["items_sold"].replace(0, pd.NA)
+    )
+
+    # Sắp xếp theo doanh thu
+    df = df.sort_values("revenue", ascending=False)
+
+    # Top 10
+    top10 = df.head(10).copy()
+
+    # Others
+    # others = df.iloc[10:]
+
+    # if not others.empty:
+    #     others_row = pd.DataFrame({
+    #         "category": ["Others"],
+    #         "revenue": [others["revenue"].sum()],
+    #         "gross_profit": [others["gross_profit"].sum()],
+    #         "gross_margin": [
+    #             others["gross_profit"].sum()
+    #             / others["revenue"].sum() * 100
+    #             if others["revenue"].sum() > 0 else 0
+    #         ],
+    #         "items_sold": [others["items_sold"].sum()],
+    #         "avg_review_score": [others["avg_review_score"].mean()],
+    #         "aov_proxy": [
+    #             others["revenue"].sum()
+    #             / others["items_sold"].sum()
+    #             if others["items_sold"].sum() > 0 else 0
+    #         ],
+    #     })
+
+    #     df = pd.concat([top10, others_row], ignore_index=True)
+    # else:
+    #     df = top10
+    df = top10
+    return df
+
 
 def get_customer_features() -> pd.DataFrame:
     if table_exists("storage", "mart_customer_cluster_features"):
@@ -958,9 +1073,12 @@ def render_customer_segment_cards(summary: pd.DataFrame):
 monthly = get_monthly_kpi()
 status_df = get_order_status()
 freight_df = get_freight_monthly()
+profit_monthly = get_monthly_profitability()
+
 seller_top = get_seller_top(10)
 seller_total_revenue = get_seller_total_revenue()
 category_top = get_category_top(10)
+all_category = get_all_category()
 customer_df = add_customer_cluster(get_customer_features())
 review_df = get_review_distribution()
 bad_review_rate = get_bad_review_rate()
@@ -992,6 +1110,18 @@ if not monthly.empty:
         monthly_view = monthly.copy()
 else:
     monthly_view = monthly.copy()
+
+# Apply the same sidebar date filter to profitability data
+if not profit_monthly.empty:
+    profit_monthly_view = profit_monthly.copy()
+
+    if not monthly.empty and isinstance(selected_range, tuple) and len(selected_range) == 2:
+        profit_monthly_view = profit_monthly_view[
+            (pd.to_datetime(profit_monthly_view["month_date"]).dt.date >= start_date)
+            & (pd.to_datetime(profit_monthly_view["month_date"]).dt.date <= end_date)
+        ].copy()
+else:
+    profit_monthly_view = profit_monthly.copy()
 
 st.sidebar.markdown("---")
 st.sidebar.caption("Bảng chính được dùng: fact/dim/snapshot/mart trong schema storage.")
@@ -1053,8 +1183,16 @@ with tabs[0]:
     with col2:
         st.subheader("Order fulfillment")
         if not status_df.empty:
-            fig = px.pie(status_df, names="order_status", values="order_count", hole=0.62)
-            fig.update_layout(template="plotly_dark", height=360, margin=dict(l=10, r=10, t=10, b=10))
+            fig = px.pie(status_df, names="order_status", values="order_count", hole=0.4)
+            fig.update_traces(
+                domain=dict(x=[0.05, 0.95], y=[0.05, 0.95])
+            )
+            fig.update_layout(template="plotly_dark", height=360, margin=dict(l=10, r=10, t=10, b=10), legend=dict(
+                orientation="h",
+                y=-0.1,
+                x=0.5,
+                xanchor="center"
+            ))
             st.plotly_chart(fig, use_container_width=True)
         else:
             empty_state("Chưa có dữ liệu trạng thái đơn hàng.")
@@ -1164,66 +1302,76 @@ with tabs[1]:
         col1, col2 = st.columns(2)
 
         # =========================
-        # Chart 1: GMV vs Order Volume
+        # Chart 1: GMV vs Order Count
         # =========================
         with col1:
-            st.subheader("GMV vs order volume")
-            st.caption("Mỗi điểm là một tháng · kích thước thể hiện AOV")
+            st.subheader("GMV vs Order count")
 
             scatter_df = valid_revenue_view.copy()
 
             if scatter_df.empty:
                 empty_state("Chưa đủ dữ liệu để vẽ quan hệ GMV và số đơn.")
             else:
-                fig = px.scatter(
-                    scatter_df,
-                    x="orders",
-                    y="revenue",
-                    size="aov",
-                    color="aov",
-                    hover_name="month_label",
-                    size_max=28,
-                    color_continuous_scale=["#34d9c5", "#9677ff", "#ffbd59"],
-                    labels={
-                        "orders": "Order count",
-                        "revenue": "GMV",
-                        "aov": "AOV",
-                    },
+
+                fig = go.Figure()
+
+                # GMV
+                fig.add_trace(
+                    go.Bar(
+                        x=scatter_df["month_date"],
+                        y=scatter_df["revenue"],
+                        name="GMV",
+                        marker_color="#4b5578",
+                        hovertemplate="<b>%{x|%b %Y}</b><br>GMV: R$%{y:,.0f}<extra></extra>",
+                    )
                 )
 
-                fig.update_traces(
-                    marker=dict(
-                        line=dict(width=1, color="#dbe2f1"),
-                        opacity=0.82,
-                    ),
-                    hovertemplate=(
-                        "<b>%{hovertext}</b><br>"
-                        "Orders: %{x:,.0f}<br>"
-                        "GMV: R$%{y:,.0f}<br>"
-                        "AOV: R$%{marker.size:,.0f}"
-                        "<extra></extra>"
-                    ),
+                # Order Count
+                fig.add_trace(
+                    go.Scatter(
+                        x=scatter_df["month_date"],
+                        y=scatter_df["orders"],
+                        mode="lines+markers",
+                        name="Order Count",
+                        yaxis="y2",
+                        line=dict(color="#d058ff", width=3),
+                        marker=dict(size=7),
+                        hovertemplate="<b>%{x|%b %Y}</b><br>Orders: %{y:,.0f}<extra></extra>",
+                    )
                 )
+
 
                 fig.update_layout(
                     template="plotly_dark",
                     height=390,
                     margin=dict(l=10, r=10, t=10, b=10),
+
                     plot_bgcolor="rgba(0,0,0,0)",
                     paper_bgcolor="rgba(0,0,0,0)",
-                    coloraxis_colorbar=dict(
-                        title="AOV",
-                        tickprefix="R$",
+
+                    legend=dict(
+                        orientation="h",
+                        y=1.02,
+                        x=0,
                     ),
+
                     xaxis=dict(
-                        title="Order count",
+                        title="Month",
                         gridcolor="#23283a",
                     ),
+
                     yaxis=dict(
-                        title="GMV",
+                        title="GMV (R$)",
                         tickprefix="R$",
                         tickformat="~s",
                         gridcolor="#23283a",
+                    ),
+
+                    yaxis2=dict(
+                        title="Order Count",
+                        overlaying="y",
+                        side="right",
+                        showgrid=False,
                     ),
                 )
 
@@ -1233,58 +1381,305 @@ with tabs[1]:
         # Chart 2: AOV Movement
         # =========================
         with col2:
-            st.subheader("AOV movement")
-            st.caption("Giá trị trung bình mỗi đơn hàng theo tháng")
+            st.subheader("GMV vs AOV")
 
             aov_df = valid_revenue_view.copy()
 
             if aov_df.empty:
                 empty_state("Chưa đủ dữ liệu để vẽ AOV theo tháng.")
             else:
-                fig = px.line(
-                    aov_df,
-                    x="month_date",
-                    y="aov",
-                    markers=True,
-                    labels={
-                        "month_date": "Tháng",
-                        "aov": "AOV",
-                    },
+                fig = go.Figure()
+
+                # GMV
+                fig.add_trace(
+                    go.Bar(
+                        x=aov_df["month_date"],
+                        y=aov_df["revenue"],
+                        name="GMV",
+                        marker_color="#4b5578",
+                        hovertemplate="<b>%{x|%b %Y}</b><br>GMV: R$%{y:,.0f}<extra></extra>",
+                    )
                 )
 
-                fig.update_traces(
-                    line=dict(width=3),
-                    marker=dict(size=8),
-                    hovertemplate="<b>%{x|%b %Y}</b><br>AOV: R$%{y:,.0f}<extra></extra>",
+                # AOV
+                fig.add_trace(
+                    go.Scatter(
+                        x=aov_df["month_date"],
+                        y=aov_df["aov"],
+                        mode="lines+markers",
+                        name="AOV",
+                        yaxis="y2",
+                        line=dict(color="#34d9c5", width=3),
+                        marker=dict(size=7),
+                        hovertemplate="<b>%{x|%b %Y}</b><br>AOV: R$%{y:,.0f}<extra></extra>",
+                    )
                 )
 
-                fig.add_hline(
-                    y=avg_aov,
-                    line_dash="dash",
-                    annotation_text=f"Avg AOV {money(avg_aov)}",
-                    annotation_position="top left",
-                )
 
                 fig.update_layout(
                     template="plotly_dark",
                     height=390,
                     margin=dict(l=10, r=10, t=10, b=10),
-                    showlegend=False,
+
                     plot_bgcolor="rgba(0,0,0,0)",
                     paper_bgcolor="rgba(0,0,0,0)",
-                    xaxis=dict(
-                        title="Tháng",
-                        gridcolor="rgba(0,0,0,0)",
+
+                    legend=dict(
+                        orientation="h",
+                        y=1.02,
+                        x=0,
                     ),
-                    yaxis=dict(
-                        title="AOV",
-                        tickprefix="R$",
+
+                    xaxis=dict(
+                        title="Month",
                         gridcolor="#23283a",
+                    ),
+
+                    yaxis=dict(
+                        title="GMV (R$)",
+                        tickprefix="R$",
+                        tickformat="~s",
+                        gridcolor="#23283a",
+                    ),
+
+                    yaxis2=dict(
+                        title="AOV (R$)",
+                        overlaying="y",
+                        side="right",
+                        showgrid=False,
+                    ),
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+        # =========================
+        # Profitability section
+        # =========================
+        st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+
+        st.markdown(
+            """
+            <div class='insight'>
+                ◈ <b>Profitability view:</b> Phần này mô phỏng hiệu quả tài chính sau khi trừ 
+                <b>Estimated COGS</b> và <b>Estimated Tax</b> theo giả định category.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if profit_monthly_view.empty:
+            empty_state(
+                "Chưa có dữ liệu profitability. Hãy kiểm tra các cột estimated_cogs, estimated_tax, gross_profit trong fct_daily_product_snapshot."
+            )
+        else:
+            profit_view = profit_monthly_view.copy().sort_values("month_date")
+            profit_view = profit_view[profit_view["gmv"] > 0].copy()
+
+            selected_profit_gmv = safe_sum(profit_view, "gmv")
+            selected_cogs = safe_sum(profit_view, "estimated_cogs")
+            selected_tax = safe_sum(profit_view, "estimated_tax")
+            selected_gross_profit = safe_sum(profit_view, "gross_profit")
+            selected_remaining = selected_profit_gmv - selected_cogs - selected_tax
+
+            selected_gross_margin = (
+                selected_gross_profit * 100 / selected_profit_gmv
+                if selected_profit_gmv
+                else 0
+            )
+
+            p1, p2, p3, p4 = st.columns(4)
+
+            with p1:
+                kpi_card(
+                    "Estimated COGS",
+                    money(selected_cogs),
+                    "Giá vốn ước tính",
+                )
+
+            with p2:
+                kpi_card(
+                    "Estimated Tax",
+                    money(selected_tax),
+                    "Thuế ước tính",
+                )
+
+            with p3:
+                kpi_card(
+                    "Gross Profit",
+                    money(selected_gross_profit),
+                    "GMV - Estimated COGS",
+                )
+
+            with p4:
+                kpi_card(
+                    "Gross Margin",
+                    pct(selected_gross_margin),
+                    "Gross Profit / GMV",
+                )
+
+            col3, col4 = st.columns([1, 1.35])
+
+            # =========================
+            # Chart 3: Waterfall Chart
+            # =========================
+            with col3:
+                st.subheader("GMV to profitability")
+
+                fig = go.Figure(
+                    go.Waterfall(
+                        name="Profitability",
+                        orientation="v",
+                        measure=[
+                            "absolute",
+                            "relative",
+                            "relative",
+                            "total",
+                        ],
+                        x=[
+                            "GMV",
+                            "Estimated COGS",
+                            "Estimated Tax",
+                            "After COGS & Tax",
+                        ],
+                        y=[
+                            selected_profit_gmv,
+                            -selected_cogs,
+                            -selected_tax,
+                            0,
+                        ],
+                        text=[
+                            money(selected_profit_gmv),
+                            f"-{money(selected_cogs)}",
+                            f"-{money(selected_tax)}",
+                            money(selected_remaining),
+                        ],
+                        textposition="outside",
+                        connector={
+                            "line": {
+                                "color": "#7f879e",
+                                "width": 1,
+                            }
+                        },
+                        increasing={
+                            "marker": {
+                                "color": "#9677ff",
+                            }
+                        },
+                        decreasing={
+                            "marker": {
+                                "color": "#ff6b81",
+                            }
+                        },
+                        totals={
+                            "marker": {
+                                "color": "#34d9c5",
+                            }
+                        },
+                        hovertemplate="<b>%{x}</b><br>Value: R$%{y:,.0f}<extra></extra>",
+                    )
+                )
+
+                fig.update_layout(
+                    template="plotly_dark",
+                    height=420,
+                    margin=dict(l=10, r=10, t=30, b=10),
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    showlegend=False,
+                    yaxis=dict(
+                        title="Value",
+                        tickprefix="R$",
+                        tickformat="~s",
+                        gridcolor="#23283a",
+                    ),
+                    xaxis=dict(
+                        title=None,
+                        gridcolor="rgba(0,0,0,0)",
                     ),
                 )
 
                 st.plotly_chart(fig, use_container_width=True)
 
+            # =========================
+            # Chart 4: Combo Chart
+            # =========================
+            with col4:
+                st.subheader("Revenue and profitability trend")
+
+                fig = go.Figure()
+
+                fig.add_trace(
+                    go.Bar(
+                        x=profit_view["month_date"],
+                        y=profit_view["gmv"],
+                        name="GMV",
+                        marker_color="#4b5578",
+                        hovertemplate="<b>%{x|%b %Y}</b><br>GMV: R$%{y:,.0f}<extra></extra>",
+                    )
+                )
+
+                fig.add_trace(
+                    go.Bar(
+                        x=profit_view["month_date"],
+                        y=profit_view["gross_profit"],
+                        name="Gross Profit",
+                        marker_color="#9677ff",
+                        hovertemplate="<b>%{x|%b %Y}</b><br>Gross Profit: R$%{y:,.0f}<extra></extra>",
+                    )
+                )
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=profit_view["month_date"],
+                        y=profit_view["gross_margin"],
+                        name="Gross Margin %",
+                        mode="lines+markers",
+                        yaxis="y2",
+                        line=dict(
+                            color="#34d9c5",
+                            width=3,
+                        ),
+                        marker=dict(
+                            size=7,
+                            color="#34d9c5",
+                        ),
+                        hovertemplate="<b>%{x|%b %Y}</b><br>Gross Margin: %{y:.2f}%<extra></extra>",
+                    )
+                )
+
+                fig.update_layout(
+                    template="plotly_dark",
+                    height=420,
+                    barmode="group",
+                    margin=dict(l=10, r=10, t=30, b=10),
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=1.02,
+                        xanchor="left",
+                        x=0,
+                    ),
+                    xaxis=dict(
+                        title="Tháng",
+                        gridcolor="rgba(0,0,0,0)",
+                    ),
+                    yaxis=dict(
+                        title="GMV / Gross Profit",
+                        tickprefix="R$",
+                        tickformat="~s",
+                        gridcolor="#23283a",
+                    ),
+                    yaxis2=dict(
+                        title="Gross Margin %",
+                        overlaying="y",
+                        side="right",
+                        ticksuffix="%",
+                        gridcolor="rgba(0,0,0,0)",
+                    ),
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
 
 # =========================
 # SELLERS
@@ -1436,62 +1831,143 @@ with tabs[3]:
 
         product_view = product_view.sort_values("revenue", ascending=False).head(8)
 
-        col1, col2 = st.columns([1.65, 1])
+        col3 = st.columns(1)[0]
 
-        with col1:
-            st.subheader("Category gross GMV")
-            st.caption("Top eight · R$ thousand")
+        with col3:
+            st.subheader("Category Revenue vs Profit")
+            st.caption("Compare categories by GMV, Gross Profit, Gross Margin and Items Sold")
 
-            colors = [
-                "#9677ff",
-                "#34d9c5",
-                "#ffbd59",
-                "#58a6ff",
-                "#ef7fc3",
-                "#ff6b81",
-                "#68d391",
-                "#9f7aea",
-            ]
+        category_df = all_category.sort_values("revenue", ascending=True)
 
-            fig = px.bar(
-                product_view.sort_values("revenue", ascending=True),
-                x="revenue",
-                y="category_label",
+        fig = go.Figure()
+
+        # GMV
+        fig.add_trace(
+            go.Bar(
+                y=category_df["category"],
+                x=category_df["revenue"],
+                name="GMV",
                 orientation="h",
-                text=None,
-                labels={
-                    "revenue": "GMV",
-                    "category_label": "",
-                },
-                color="category_label",
-                color_discrete_sequence=colors,
-            )
-
-            fig.update_traces(
-                marker_line_width=0,
-                hovertemplate="<b>%{y}</b><br>GMV: R$%{x:,.0f}<extra></extra>",
-            )
-
-            fig.update_layout(
-                template="plotly_dark",
-                height=460,
-                showlegend=False,
-                margin=dict(l=10, r=20, t=10, b=10),
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                xaxis=dict(
-                    gridcolor="#23283a",
-                    tickprefix="R$",
-                    tickformat="~s",
-                    title=None,
-                ),
-                yaxis=dict(
-                    title=None,
-                    gridcolor="rgba(0,0,0,0)",
+                marker_color="#4b5578",
+                hovertemplate=(
+                    "<b>%{y}</b><br>"
+                    "GMV: R$%{x:,.0f}<extra></extra>"
                 ),
             )
+        )
 
-            st.plotly_chart(fig, use_container_width=True)
+        # Gross Profit
+        fig.add_trace(
+            go.Bar(
+                y=category_df["category"],
+                x=category_df["gross_profit"],
+                name="Gross Profit",
+                orientation="h",
+                marker_color="#2ecc71",
+                customdata=category_df["gross_margin"],
+                hovertemplate=(
+                    "<b>%{y}</b><br>"
+                    "Gross Profit: R$%{x:,.0f}<br>"
+                    "Gross Margin: %{customdata:.2f}%"
+                    "<extra></extra>"
+                ),
+            )
+        )
+
+        fig.update_layout(
+            template="plotly_dark",
+            height=550,
+
+            barmode="group",
+
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+
+            margin=dict(
+                l=10,
+                r=10,
+                t=20,
+                b=10,
+            ),
+
+            legend=dict(
+                orientation="h",
+                y=-0.1,
+                x=0.5,
+                xanchor="center"
+            ),
+
+            xaxis=dict(
+                title="Amount (R$)",
+                tickprefix="R$",
+                tickformat="~s",
+                gridcolor="#23283a",
+            ),
+
+            yaxis=dict(
+                title="Category",
+                categoryorder="total ascending",
+            ),
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        col2 = st.columns(1)[0]
+
+        # with col1:
+        #     st.subheader("Category gross GMV")
+        #     st.caption("Top eight · R$ thousand")
+
+        #     colors = [
+        #         "#9677ff",
+        #         "#34d9c5",
+        #         "#ffbd59",
+        #         "#58a6ff",
+        #         "#ef7fc3",
+        #         "#ff6b81",
+        #         "#68d391",
+        #         "#9f7aea",
+        #     ]
+
+        #     fig = px.bar(
+        #         product_view.sort_values("revenue", ascending=True),
+        #         x="revenue",
+        #         y="category_label",
+        #         orientation="h",
+        #         text=None,
+        #         labels={
+        #             "revenue": "GMV",
+        #             "category_label": "",
+        #         },
+        #         color="category_label",
+        #         color_discrete_sequence=colors,
+        #     )
+
+        #     fig.update_traces(
+        #         marker_line_width=0,
+        #         hovertemplate="<b>%{y}</b><br>GMV: R$%{x:,.0f}<extra></extra>",
+        #     )
+
+        #     fig.update_layout(
+        #         template="plotly_dark",
+        #         height=460,
+        #         showlegend=False,
+        #         margin=dict(l=10, r=20, t=10, b=10),
+        #         plot_bgcolor="rgba(0,0,0,0)",
+        #         paper_bgcolor="rgba(0,0,0,0)",
+        #         xaxis=dict(
+        #             gridcolor="#23283a",
+        #             tickprefix="R$",
+        #             tickformat="~s",
+        #             title=None,
+        #         ),
+        #         yaxis=dict(
+        #             title=None,
+        #             gridcolor="rgba(0,0,0,0)",
+        #         ),
+        #     )
+
+        #     st.plotly_chart(fig, use_container_width=True)
 
         with col2:
             render_sales_velocity(product_view)

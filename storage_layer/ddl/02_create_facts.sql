@@ -65,3 +65,32 @@ CREATE TABLE IF NOT EXISTS storage.fct_customer_behavior_snapshot (
     order_cancelled_cnt INT,
     avg_day_return_to_buy NUMERIC(10,2)
 );
+
+
+ALTER TABLE storage.fct_daily_product_snapshot
+ADD COLUMN IF NOT EXISTS estimated_cogs NUMERIC(18,2),
+ADD COLUMN IF NOT EXISTS estimated_tax NUMERIC(18,2),
+ADD COLUMN IF NOT EXISTS gross_profit NUMERIC(18,2),
+ADD COLUMN IF NOT EXISTS gross_margin NUMERIC(10,4),
+ADD COLUMN IF NOT EXISTS net_revenue_after_tax NUMERIC(18,2);
+UPDATE storage.fct_daily_product_snapshot fp
+SET
+    estimated_cogs = COALESCE(fp.total_revenue, 0) * COALESCE(a.estimated_cogs_rate, 0.7000),
+
+    estimated_tax = COALESCE(fp.total_revenue, 0) * COALESCE(a.estimated_tax_rate, 0.0800),
+
+    gross_profit = COALESCE(fp.total_revenue, 0)
+                   - COALESCE(fp.total_revenue, 0) * COALESCE(a.estimated_cogs_rate, 0.7000),
+
+    gross_margin = (
+        COALESCE(fp.total_revenue, 0)
+        - COALESCE(fp.total_revenue, 0) * COALESCE(a.estimated_cogs_rate, 0.7000)
+    ) / NULLIF(COALESCE(fp.total_revenue, 0), 0) * 100,
+
+    net_revenue_after_tax = COALESCE(fp.total_revenue, 0)
+                            - COALESCE(fp.total_revenue, 0) * COALESCE(a.estimated_tax_rate, 0.0800)
+
+FROM storage.dim_product dp
+LEFT JOIN storage.dim_category_financial_assumption a
+    ON COALESCE(dp.product_category_name_english) = a.product_category_name_english
+WHERE fp.product_key = dp.product_key;

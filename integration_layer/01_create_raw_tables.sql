@@ -226,3 +226,30 @@ CREATE TABLE IF NOT EXISTS staging.sellers (
     last_batch_id BIGINT,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+DROP TABLE IF EXISTS raw.category_financial_assumption;
+
+CREATE TABLE raw.category_financial_assumption (
+    category_financial_assumption_id SERIAL PRIMARY KEY,
+    product_category_name_english TEXT NOT NULL UNIQUE,
+    estimated_cogs_rate NUMERIC(6,4) NOT NULL,
+    estimated_tax_rate NUMERIC(6,4) NOT NULL
+);
+
+INSERT INTO raw.category_financial_assumption
+(
+    product_category_name_english,
+    estimated_cogs_rate,
+    estimated_tax_rate
+)
+VALUES
+('health_beauty', 0.58, 0.07),
+('watches_gifts', 0.60, 0.08),
+('bed_bath_table', 0.67, 0.08),
+('sports_leisure', 0.62, 0.08),
+('computers_accessories', 0.82, 0.09),
+('furniture_decor', 0.72, 0.08),
+('cool_stuff', 0.60, 0.08),
+('housewares', 0.68, 0.08),
+('unknown', 0.65, 0.08)
+ON CONFLICT (product_category_name_english) DO NOTHING;
